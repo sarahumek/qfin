@@ -1,0 +1,74 @@
+---
+title: "Credit_Default_Exercise"
+author: "Sarah-Katharina Umek"
+date: "2021-01-29"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Consider a credit portfolio with \emph{n} obligors. Given a common (latent) factor $\Psi$ defaults occur independently with probability $Q = p(\Psi )$. Let $D_i$ be the default indicator for obligor \emph{i} ( $D_i= 1$ if obligor \emph{i} defaults, $D_i = 0$ otherwise), and write $M = D_1 + ... + D_n$ for the total number of defaults.\\
+
+Suppose that \emph{Q} has a Beta distribution with parameters \emph{a} and \emph{b}.\\
+
+\begin{itemize}
+    \item Take $n=100, a=1$ and $b=9$, and use simulation to determine the default probabilities $\EX (D_i)$, the default correlations $cor(D_i, D_j), i \neq j$, and the distribution of M.
+    
+   \item Obtain exact expressions for the default probabilities and correlations, and the distribution of M. How well does simulation work?
+\end{itemize}
+
+```{r Implementation}
+library("ggpubr")
+
+portfolio_simulate <- function(n = 100, a = 1, b = 9){
+  
+  # Generating a probability modeled as a beta distribution
+  psi <- rbeta(1, a, b)
+  
+  # Generating n Bernoulli trials
+  D <- rbinom(n, 1, psi)
+  
+  return(list(D, sum(D)))
+  
+}
+
+run_simulation <- function(runs = 1000){
+  
+  M_val <- rep(0, runs)
+  dframe <- data.frame(sample = 1:100)
+  for(i in 1:runs){
+    res <- portfolio_simulate()
+    M_val[i] <- res[[2]]
+    dframe[toString(i)] <- res[[1]]
+  }
+  hist(M_val, breaks = 1000)
+  p<- seq(0, 1, length = 1000)
+  plot(p, dbeta(p, 1, 9), type = "l")
+  
+  cor_sum <- 0
+  for(i in 1:100){
+    for(j in 1:100){
+      if(i != j){
+        D_x1 <- as.numeric(dframe[i:i,])[2:1001]
+        D_x2 <- as.numeric(dframe[j:j,])[2:1001]
+        cor_sum <- cor_sum + cor(D_x1, D_x2, method = c("pearson", "kendall", "spearman"))
+      }
+    }
+  }
+  # E[D_i] = P(D_i = 1) * 1 + P(D_i = 0) * 0
+  #        = P(D_i = 1) * 1
+  #        = Sum of all M values / (Total trials)
+  #        = sum(M_val) / (1000 * 100)
+  Exp_D <- sum(M_val) / (1000 * 100)
+  Cor_D <- cor_sum / 9900 
+  cat(sprintf("Expected Default: \"%f\" \nCorrelation: \"%f\"\n", Exp_D, Cor_D))
+  return(M_val)
+  
+}
+
+result <- run_simulation()
+# Gives me two values: expected default and the other will be the correlation D_i and D_j
+```
+

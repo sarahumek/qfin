@@ -1,0 +1,137 @@
+---
+title: "Fitting_GARCH"
+author: "Sarah-Katharina Umek"
+date: "2022-10-25"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 70), tidy = TRUE)
+library(readxl)
+library(dplyr)
+library(knitr)
+library(xtable)
+library(stargazer)
+library(zoo)
+library(xts)
+library(quantmod)
+library(tidyquant)
+library(PerformanceAnalytics)
+library(knitr)
+library(TTR)
+library(PortfolioAnalytics)
+library(ROI)
+library(ROI.plugin.glpk)
+library(ROI.plugin.quadprog)
+library(ROI.plugin.symphony)
+library(fPortfolio)
+library(tseries)
+library(lmtest)
+library(car)
+library(forecast)
+library(ggplot2)
+library(vars)
+library(rugarch)
+```
+
+Considering a time series observations} $y_t , t = 1, . . . , T$ of your choice and investigate, if predictability in the conditional mean and/or the conditional variance is present:
+
+```{r time series google}
+
+getSymbols("GOOG", from = '2015-10-30', to =  '2022-10-30', warnings= FALSE, auto.assign= TRUE)
+google <- Cl(na.omit(GOOG))
+google <- na.omit(diff(log(google)))
+plot(google, col = "black", main = "Daily GOOG Return", xlab = "Time")
+par(mfrow= c(1,2))
+acf(google)
+acf(google^2)
+
+```
+
+Continuing by estimating an ARMA-GARCH model for this time series and choosing an appropriate model orders.
+
+```{r fit model}
+model_specs <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1,1)), mean.model = list(armaOrder = c(1, 1), include.mean = FALSE), distribution.model = "norm")
+
+fit <- ugarchfit(data = google, spec = model_specs)
+infocriteria(fit)
+
+model_specs2 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1,1)), mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), distribution.model = "norm")
+
+fit2 <- ugarchfit(data = google, spec = model_specs2)
+
+infocriteria(fit2)
+
+model_specs2_t <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1,1)), mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), distribution.model = "std")
+
+fit2_t <- ugarchfit(data = google, spec = model_specs2_t)
+
+infocriteria(fit2_t)
+
+
+model_specs3 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1,1)), mean.model = list(armaOrder = c(0, 1), include.mean = FALSE), distribution.model = "norm")
+
+fit3 <- ugarchfit(data = google, spec = model_specs3)
+infocriteria(fit3)
+
+model_specs4 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1,1)), mean.model = list(armaOrder = c(1, 0), include.mean = FALSE), distribution.model = "norm")
+
+fit4 <- ugarchfit(data = google, spec = model_specs4)
+infocriteria(fit4)
+
+model_specs5 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1,1)), mean.model = list(armaOrder = c(2, 2), include.mean = FALSE), distribution.model = "norm")
+
+fit5 <- ugarchfit(data = google, spec = model_specs5)
+infocriteria(fit5)
+
+model_specs6 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(2,2)), mean.model = list(armaOrder = c(1, 1), include.mean = FALSE), distribution.model = "norm")
+
+fit6 <- ugarchfit(data = google, spec = model_specs5)
+infocriteria(fit6)
+
+model_specs6_t <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(2,2)), mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), distribution.model = "std")
+
+fit6_t <- ugarchfit(data = google, spec = model_specs2_t)
+
+infocriteria(fit6_t)
+
+
+plot(fit2_t, which = 10)
+plot(fit6_t, which = 10)
+
+```
+
+Using AIC and BIC to compare the models, we end up choosing an ARMA(0,0) GARCH(1,1) (no significant improvement for higher order ARMA models), however there is an improvement sung student-t distributions.  Checking the standardized residuals for the selected model, we see that the ACF looks okay so we proceed with the Thus our model looks as follows:\newline
+
+$$r_t = \mu_t + X_t, \ \ \ \text{with} \  X_t = \sigma_t \varepsilon_t$$
+$$\sigma_t^2 = \alpha_0 + \alpha_1 X_{t-1}^2 + \gamma_1 \sigma_{t-1}^2$$
+
+Next we discuss predictability in the light of the estimated parameters for the selected model.
+
+```{r conditional SD}
+fit2_t
+
+sd_sample <- sd(google)
+sd_sample
+
+sd_estimates <- as.data.frame(tail(sigma(fit2_t), n = 1))[,1]
+sd_estimates
+
+plot(fit2_t, which= 3)
+abline(h = sd_sample, col = "orange")
+abline(h = sd_estimates, col = "darkgreen")
+legend("topleft", legend = c("Sample SD", "Estimated SD"), col = c("orange", "darkgreen"), lty = 1:2, cex = 0.8)
+
+plot(sigma(fit2_t))
+
+```
+
+```{r estimating}
+forecast_model <- ugarchforecast(fit2_t, data = NULL, n.ahead = 100, n.roll
+= 0, out.sample = 100)
+
+plot(forecast_model, which= 1) 
+```
+
+

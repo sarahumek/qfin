@@ -1,0 +1,730 @@
+\documentclass{article}
+% math packages
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{todonotes}
+\usepackage{amsfonts} %for the Rational numbers sign,..
+% other stuff
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{minted}
+\usepackage{framed,graphicx,xcolor}
+\usepackage[left=2cm, right=2cm, top=2cm]{geometry}
+\definecolor{shadecolor}{gray}{0.9}
+
+
+% helpful commands (you can add your own)
+\DeclareMathOperator*{\E}{\mathbb{E}}
+\DeclareMathOperator*{\PP}{\mathbb{P}}
+
+% for no indent
+\setlength{\parindent}{0pt}
+
+\title{Optimization Project}
+
+\author{Sarah-Katharina Umek}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+
+\section{Task}
+Implement the steepest descent method in R. Write an R function which implements this algorithm for solving the unconstrained optimization problem
+
+$$min_{x \in \mathbb{R}^n}f(x)$$
+
+when the objective function $f$ and its gradient $\Delta f$ are available. Recall that the steepest descent method starts with some initial guess $x^0$ and in each iteration updates the point by
+
+$$x^{k+1} = x^k - \alpha^k \Delta f(x^k),$$
+
+where $d^k = −\delta f(x^k)$ is a descent direction and $\alpha^k$ is a step-size in iteration $k$. The algorithm
+terminates when the stationary point condition (i.e. $\Delta f(x) = 0$) is approximately satisfied.
+
+\section{Method explanation}
+
+The steepest descent method is a first order iterative optimization algorithm which aims in our case to find the minimum of a function. Our algorithm, which is a gradient descent, will only take into account the first derivative of our objective function, when it performs updates on the parameters.\newline
+
+To start our gradient descent we choose a random point on our objective function, which we will call $x_0$, from which the aim is to descent to the local minimum by iterative steps, given by $x^{k+1} = x^k - \alpha^k \Delta f(x^k),$, where $\alpha$ denotes the chosen step size and k the iteration. The chosen step size, $\alpha$, thus determines the speed of the descent, which will have an effect on the total amount of iterations.\newline
+
+The algorithm will approximate the local minimum until we decide the result is accurate enough to stop, which we do by setting a tolerance. A higher tolerance will mean less iterations overall, but less precise results.\newline
+
+\pagebreak
+\section{Algorithm}
+
+Model using constant step size, note if the step size is chosen too large the model will overshoot and convergence will take too many iterations. 
+
+We chose the following algorithm, with a constant step size, $\alpha$. After playing around with the step size on different function, we realized that an $\alpha$ that is too large will overshoot and use more iteration to reach convergence, or in some cases even run out of iterations. The ideal $\alpha$ we found to be between $[0.01, 0.155]$. For the following computations we will therefore work with $\alpha = 0.1$.\newline
+
+Furthermore, we chose the smallest positive floating number, as we prioritized accuracy over a shorter run time, i.e. fewer iterations. Depending on what you would want to use this algorithm for you could sacrifice accuracy for speed by giving a larger tolerance as an input.\newline
+
+We still needed to consider our gradient descent to not work or work slower than expected, i.e. in the case of non-convex functions, saddle points or functions that tend to $- \infty$ in the minimization we are trying to do. In such cases our algorithm would run too many iterations until eventually manually stopped by us. Thus we implemented a stop, by giving it a hard break at 1000 iterations, as we found that to be sufficient in most cases to find an appropriate approximation of our minimum.\newline
+
+Note that because if the gradient equals zero and we are only looking at the FONC, we cannot determine whether we actually have reached a local minimum or a global minimum or even a different extreme point, such as a local maximum or a saddle point.\\ 
+Therefore, we coded our algorithm in a way that it approximated the minimum we are trying to find. If the gradient is equal to zero, which is the only way we get a norm of zero, the approximation is not successful, so we must see it as a failure of our algorithm's approximation, i.e. the result of the steepest descent is not consistent, as we can't with certainty say that the extreme point is a minimum.\newline
+ 
+Additionally, we must note that we decided to define the gradient function as a matrix as it allowed us to use norm for the tolerance, we could have alternatively used the square root of squared gradients. We additionally used is.na for the norm of our gradient to allow computations with multivariate functions. Had we not implemented these elements into our code, multivariate functions would have not yielded reliable results or no results at all.\newline
+
+The rest of our algorithm is just the implementation of the formula that the steepest descent method follows, while looped based on our conditions we elaborated on prior.\newline 
+
+See our algorithm below:
+
+<<>>=
+steepest_descent_2 <- function(x0, step_size, f, g, max_iter = 1000, 
+    tol = .Machine$double.eps^(1/2)) {
+  
+  x <- x0
+  k <- 1
+  visited <- c()
+  
+  while(k <= max_iter){
+    f1 <- f(x)
+    g1 <- g(x)
+    visited <- c(visited,x)
+    z1 <- norm(g1, "F")
+    if(is.na(z1)){
+      break
+    }
+    if(z1 == 0.0){
+      print("Gradient became zero. Result of Steepest descent not consistent.")
+      return(list(xmin = x,visited_points = matrix(visited, ncol = length(x), byrow = TRUE),
+      fmin = NA,niter = k))
+    }
+    if(z1 < tol){
+      print("Converged!")
+      return(list(xmin = x,visited_points = matrix(visited, ncol = length(x), byrow = TRUE),
+      fmin = f1,niter = k))
+    }
+    
+    x <- x - step_size * g1
+    k <- k + 1
+    
+  }
+  print("Maximum iterations were reached. Did not converge.")
+  return(list(xmin = x, fmin = f(x), visited_points = matrix(visited, ncol = length(x), 
+  byrow = TRUE), niter = k - 1))
+  
+}
+@
+
+\pagebreak
+\section{Implementation (Testing)}
+
+Next we need to test the algorithm. We first start by testing a uni-variate function and later move on to more complex functions. For the bi-variate cases, we will also show the path of the steepest descent in a convex and in non convex functions, to highlight some of the problems we may experience using this method.\newline
+
+Furthermore, we compute the actual mimima by hand so we can verify the accuracy of the algorithm, as well as visualize uni-variate and bi-variate functions so we can see the minimum too. 
+
+\subsection{Uni-variate Test}
+
+We start by testing our function with a very simple uni-variate function.\newline
+
+The function we are trying to minimize here is $f(x) = x^3 - 2*x^2$ which has a corresponding gradient of $\Delta f(x) = 3x^2 - 4x$. We will visualizing the function to estimate where we might find a minimum: 
+
+<<fig.dim = c(7,4.75)>>=
+curve(x^3 - 2*x^2, from = -1, to = 2, xlab= "x", ylab= "f(x)")
+@
+
+Visually we can already see that our function has one local minimum between x = 1 and x = 1.5, let's first check by solving the problem by hand. \newline
+
+FONC:
+$$\Delta f(x) = (3x^2 - 4x) = 0$$
+$$x (3x-4) = 0$$
+Therefore we obtain the following candidates: $x= 0, \ x = \frac{4}{3}$
+
+In order to check whether these points are local minima or simply extreme points, such as saddle points or local max, we plug into the SONC: $Hf(x) = 3x - 4 $\newline
+
+For $x= 0$ we obtain $Hf(0) = 3*0 -4 =  -1$ so we conclude that the candidate $x = 0$ is not a local minimum.\newline
+
+For $x = \frac{4}{3}$ we obtain $Hf(0) = 3* \frac{4}{3} -4 =  0$ so we may say that we have a local minimum at this point.\newline 
+
+Therefore, we want our algorithm to find that our function $f(x)$ is minimized at $x = \frac{4}{3}$ \newline
+
+\subsection*{Testing of uni-variate function}
+
+Defining the objective and gradient suitable for our code we rewrite as such:
+<<>>=
+function_1 <- function(var){
+  return(var[1]^3 - 2*var[1]^2)
+}
+grad_function_1 <- function(var){
+  return(matrix(3*var[1]^2 - 4*var[1]))
+}
+@
+
+We choose our starting point as $x_0 = 1$,$x_0=3$,$x_0=10$ and choose a constant step size of $\alpha = 0.1$ and plug into our function:
+
+<<>>=
+### x value at which our function is minimized
+steepest_descent_2( 1, 0.1, function_1, grad_function_1)$xmin
+# different starting value
+
+steepest_descent_2( 3, 0.1, function_1, grad_function_1)$xmin
+
+#starting value=10
+
+steepest_descent_2( 10, 0.01, function_1, grad_function_1)$xmin
+
+### local minimum of the objective function
+steepest_descent_2( 1, 0.1, function_1, grad_function_1)$fmin 
+@
+
+Note our function will also output the amount of iterations, as well as all the individual steps if ran without specifying the results we want to see.\newline
+
+We also have to take into account that for a starting point that is further away from the optimum, like $x_0=10$ for example, we have to choose a smaller step size in order for the algorithm to work.
+
+\pagebreak
+\subsection{Bi-variate functions}
+
+\subsubsection*{Convex function}
+Note that we chose our function very carefully to be convex and have only one local minimum, which is also the global minimum, so our function should always converge to it. Had we chosen a function that tends to negative infinity, with certain starting points our algorithm would have tried to converge to $- \infty$, so our result would not be a number, which we will show later.\newline
+
+Next we start challenging our algorithm a little more by choosing a convex, i.e. we choose a function with a positive semi-definite Hessian.
+
+Our function is $f(x) = 4x^2 - 4xy +2y^2 - 2y -8x$ and visualized below.
+
+<<fig.dim = c(7,5.5)>>=
+convex_bivar <- function(x, y){
+4 * x^2 -4 * x * y + 2 * y^2 - 2* y - 8 * x
+}
+x <- y <- seq(-5, 5, length = 30)
+z <- outer(x, y, convex_bivar)
+persp(x, y, z)
+@
+
+Solving by hand so we can compare the solution to the solution our algorithm, will provide us with. We start by computing the FONC:
+
+$$\Delta f(x) = \begin{bmatrix}
+8x -4y - 8\\
+4y - 4x -2
+\end{bmatrix} = \begin{bmatrix}
+0\\
+0
+\end{bmatrix}$$
+
+We get two equations we can solve to calculate the candidate for the minimum, $8x -4y - 8 = 0$ and $4y - 4x -2 = 0$. We obtain that the function reaches a minimum at $x = 2.5$ and $y = 3$.\newline
+
+Checking that the candidate is a minimum we use the SONC:$Hf(x) = \begin{bmatrix}
+8 & -4\\
+-4 & 4
+\end{bmatrix}$, which we know to be a positive definite matrix, therefore our candidate is in fact a local minimum. 
+
+\subsubsection*{Testing convex function}
+
+\subsubsection*{Different starting points}
+
+Now, we test that our algorithm gives us the same result, and we will later test it using different starting values, in order to see how the steepest descent with constant step size looks.\newline
+
+
+As in the other cases we start by rewriting our function and gradient in a way suitable for our algorithm:
+
+<<>>= 
+function2 <- function(variables) {
+  return (4* variables[1]^2 -4*variables[1] * variables[2] + 2*variables[2]^2 - 2* variables[2] - 
+  8*variables[1])
+}
+
+grad_function_2 <- function(variables){
+  return(matrix( c(8 * variables[1] - 4 * variables[2] - 8, 4 * variables[2] - 4 * variables[1] - 2)))
+}
+@
+
+For this example we will keep the step size constant at $\alpha = 0.01$ and play around with the starting point, $x_0$ and illustrate the convergence through the steepest descent method in contour plots.\newline
+
+Using $x_0 = (10, 20)$
+
+<<echo=FALSE>>=
+steepest_descent_2(c(10,20), 0.1, function2, grad_function_2)$xmin
+@
+
+Using $x_0 = (5, -10)$
+
+<<echo=FALSE>>=
+steepest_descent_2(c(5, -10), 0.1, function2, grad_function_2)$xmin
+@
+
+Using $x_0 = (-3, 3)$
+
+<<echo=FALSE>>=
+steepest_descent_2(c(-3, 3), 0.1, function2, grad_function_2)$xmin
+@
+
+Using $x_0 = (-10, -4)$
+
+<<echo=FALSE>>=
+steepest_descent_2(c(-10, -4), 0.1, function2, grad_function_2)$xmin
+@
+
+\subsubsection*{Visualization of descent}
+
+<<echo=FALSE, fig.dim = c(6,6)>>=
+visitedc1020<-steepest_descent_2(c(10,20), 0.1, function2, grad_function_2)$visited_points
+visitedc5m10<-steepest_descent_2(c(5, -10), 0.1, function2, grad_function_2)$visited_points
+visitedcm33<-steepest_descent_2(c(-3, 3), 0.1, function2, grad_function_2)$visited_points
+visitedcm10m4<-steepest_descent_2(c(-10, -4), 0.1, function2, grad_function_2)$visited_points
+
+z<-outer(seq(-10,20),seq(-10,20),FUN = function(x,y)4* x^2 -4* x * y + 2*y^2 - 2*y - 8*x)
+contour(seq(-10,20),seq(-10,20),z,xlab="x",ylab="y", main = "Visualizing the descents,
+using the starting points from the prior section", sub = " c(10, 20) red, c(5, -10) blue, c(-3, 3) orange, c(-10, 4) green")
+lines(x=visitedc1020[,1],y=visitedc1020[,2],col="red")
+lines(x=visitedc5m10[,1],y=visitedc5m10[,2],col="blue")
+lines(x=visitedcm33[,1],y=visitedcm33[,2],col="orange")
+lines(x=visitedcm10m4[,1],y=visitedcm10m4[,2],col="green")
+points(x=2.5,y=3)
+@
+\newline
+
+
+
+We can see that our algorithm approximates very fast in the first few iterations, where we can clearly also see the Zig-Zag that the steepest descent method generates, however the closer to the real value of the minimum we get the smaller our steps are and therefore we see what seems like a line but is a very narrow zig-zag, that R is not fully capable of showing. (Additionally, note that the convergence from starting points (-3, 3), (-10, 4) and (5, -10) overlaps, which is why we can't distinguish them in the contour plot.) 
+
+\subsubsection*{Accuracy}
+Just to prove the accuracy of successful convergence to the real minimum we test our algorithm by choosing random starting points from the uniform distribution from -50 to 50 and seeing how many times we converge to the actual minimum (Note in order to simplify this task we slightly altered how our steepest descent algorithm returns, which is the code we show first) We add up the successful convergences of n amount (we tested with 20) of run-troughs with random starting points:
+
+<<>>=
+steepest_descent_accuracy <- function(x0, step_size, f, g, verbose = FALSE, 
+    max_iter = 1000, tol = .Machine$double.eps^(1/2)) {
+  
+  x <- x0
+  k <- 1
+  visited <- c()
+  
+  while(k <= max_iter){
+    f1 <- f(x)
+    g1 <- g(x)
+    visited <- c(visited,x)
+    z1 <- norm(g1, "F")
+    if(is.na(z1)){
+      break
+    }
+    if(z1 == 0.0){
+      if(verbose){
+        print("Gradient became zero. Result of Steepest descent not consistent.")
+      }
+      return(list(xmin = x,visited_points = matrix(visited, ncol = length(x), 
+      byrow = TRUE),fmin = NA, niter = k, converged = FALSE))
+    }
+    if(z1 < tol){
+      if(verbose){
+        print("Converged!")
+      }
+      return(list(xmin = x,visited_points = matrix(visited, ncol = length(x), 
+      byrow = TRUE) ,fmin = f1,niter = k, converged = TRUE))
+    }
+    
+    x <- x - step_size * g1
+    k <- k + 1
+    
+  }
+  if(verbose){
+    print("Maximum iterations were reached. Did not converge")
+  }
+  return(list(xmin = x, fmin = f(x), visited_points = matrix(visited, ncol = length(x), 
+  byrow = TRUE), niter = k - 1, converged = FALSE))
+  
+}
+
+accuracy <- function(n){
+  successes <- 0
+  while(n > 0){
+    n <- n - 1
+    outcome <- steepest_descent_accuracy(c(runif(1, min = -25, max = 25), 
+    runif(1, min = -25, max = 25)), 0.1, function2, grad_function_2, FALSE)
+    if(outcome$converged == TRUE) {
+      successes <- successes + 1
+    }
+  }
+  return(successes)
+}
+
+successes <- accuracy(20)
+print(paste0("Number of successes are: ", successes))
+@
+
+We observe that our algorithm seems very successful for convex functions like this.
+
+\subsubsection*{Changing the $\alpha$}
+
+As we could observe in the prior sections, this function is very reliable in combination with our algorithm, which is why it is suitable to use it to show how different, yet still constant, step sizes influence the descent, by printing the amount of iterations.\newline
+
+We will keep the starting point constant at $x_0 = c(5,5)$ so that the changes the step size differences are comparable and output if our algorithm reached a point of ocnergence and the amount of iterations it needed to get there.\newline 
+
+\begin{itemize}
+    \item Using $\alpha = 0.01$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(5,5), 0.01, function2, grad_function_2)$niter
+    @
+    \\
+   
+    \item Using $\alpha = 0.05$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(5,5), 0.05, function2, grad_function_2)$niter
+    @
+    \\
+   
+    \item Using $\alpha = 0.1$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(5,5), 0.1, function2, grad_function_2)$niter
+    @
+    \\
+   
+    \item Using $\alpha = 0.125$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(5,5), 0.125, function2, grad_function_2)$niter
+    @
+    \\
+   
+    \item Using $\alpha = 0.15$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(5,5), 0.15, function2, grad_function_2)$niter
+    @
+    \\
+   
+    \item Using $\alpha = 0.155$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(5,5), 0.155, function2, grad_function_2)$niter
+    @
+    \\
+    
+    \item Using $\alpha = 0.175$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(5,5), 0.175, function2, grad_function_2)$niter
+    @
+    \\
+    
+    \item Using $\alpha = 0.25$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(5,5), 0.25, function2, grad_function_2)$niter
+    @
+    
+\end{itemize}
+
+
+Summarizing these results, tiny step sizes take too long to converge, so due to our very precise tolerance they take too many iteration to reach the minimum and reach 1000 iterations before reaching an acceptable approximation. We can see that our algorithm converges the fastest at step sizes between $\alpha = 0.1$ to $\alpha = 0.175$ for a function of this complexity, which we should therefore choose as our constant step size for objective functions of this form. When the step size becomes too big we tend to overshoot, therefore requiring more iteration to reach convergence once again.\newline
+
+We will test this theory using three step sizes 0.01, 0.155 and 0.25, with different starting points:
+
+\begin{itemize}
+    \item $x_0 = (0,0)$:
+    <<>>=
+    steepest_descent_2(c(0,0), 0.001, function2, grad_function_2)$niter
+    steepest_descent_2(c(0,0), 0.155, function2, grad_function_2)$niter
+    steepest_descent_2(c(0,0), 0.25, function2, grad_function_2)$niter
+    @
+    \\
+   
+    \item $x_0 = (-10,20)$:
+    <<>>=
+    steepest_descent_2(c(-10,20), 0.001, function2, grad_function_2)$niter
+    steepest_descent_2(c(-10,20), 0.155, function2, grad_function_2)$niter
+    steepest_descent_2(c(-10,20), 0.25, function2, grad_function_2)$niter
+    @
+    \\
+   
+    \item $x_0 = (2, 2.5)$:
+    <<>>=
+    steepest_descent_2(c(2, 2.5), 0.001, function2, grad_function_2)$niter
+    steepest_descent_2(c(2, 2.5), 0.155, function2, grad_function_2)$niter
+    steepest_descent_2(c(2, 2.5), 0.25, function2, grad_function_2)$niter
+    @
+
+\end{itemize}
+
+Having tested it on different starting points, which are both very close and very far away from the actual minimum we can conclude that too small and too big step sizes are not ideal for our algorithm and therefore the optimization task at hand. 
+
+
+\subsection*{Two local Minima}
+
+When the function we choose has two local minima, our function converges to either one  depending on the starting point we feed into the algorithm.
+
+We started by using a very simple function with two local minima, $f(x) = x^4 -2x^2 +y^2$. Which we visualized below. 
+
+<<fig.dim = c(6,6)>>=
+convex_bivar <- function(x, y){
+x^4 - 2 * x^2 + y^2
+}
+x <- y <- seq(-1.85, 1.85, length = 30)
+z <- outer(x, y, convex_bivar)
+persp(x, y, z)
+@
+
+The gradient of this function is $\Delta f(x) = \begin{bmatrix}
+4x^3 -4x\\
+2y
+\end{bmatrix} = \begin{bmatrix} 0 \\ 0 \end{bmatrix}$, so we have two minima at $(x,y) = (-1, 0)$ and $(x,y) = (1, 0)$.
+
+\subsubsection*{Testing two local Minima}
+
+We define the function in order to make it suitable for our algorithm again
+
+<<>>=
+function2min <- function(variables) {
+  return (variables[1]^4 - 2 * variables[1]^2 + variables[2]^2) 
+}        
+
+grad_function_2min <- function(variables){
+  return(matrix( c(4 * variables[1]^3 - 4 * variables[1], 2 * variables[2])))
+}
+@
+
+Now, we test our function using $\alpha = 0.155$ and:
+
+\begin{itemize}
+    \item $x_0 = (2,2)$ 
+    <<echo=FALSE>>=
+    steepest_descent_2(c(2,2), 0.155, function2min, grad_function_2min)$xmin
+    @
+    \\
+    
+    \item $x_0 = (-2.1,0)$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(-2.1,0), 0.155, function2min, grad_function_2min)$xmin
+    @
+    \\
+    
+    \item $x_0 = (-3,-1)$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(-3,-1), 0.155, function2min, grad_function_2min)$xmin
+    @
+    \\
+    
+    \item $x_0 = (-0.5, 0.5)$
+    <<echo=FALSE>>=
+    steepest_descent_2(c(-0.5,0.5), 0.155, function2min, grad_function_2min)$xmin
+    @
+    \\
+\end{itemize}
+
+\pagebreak 
+
+\subsubsection*{Visualization of descent}
+
+<<echo=FALSE>>=
+par(mfcol = c(2,2))
+
+visited2<-steepest_descent_2(c(2,2), 0.155, function2min, grad_function_2min)$visited_points
+z<-outer(seq(-5,2),seq(-5,2),FUN = function(x,y)x^4 - 2 * x^2 + y^2)
+contour(seq(-5,2),seq(-5,2),z,xlab="x",ylab="y", main = "starting point (2,2)")
+lines(x=visited2[,1],y=visited2[,2],col="red")
+
+visited2<-steepest_descent_2(c(-2.1,0), 0.155, function2min, grad_function_2min)$visited_points
+z<-outer(seq(-5,2),seq(-5,2),FUN = function(x,y)x^4 - 2 * x^2 + y^2)
+contour(seq(-5,2),seq(-5,2),z,xlab="x",ylab="y", main = "starting point (2.1,0)")
+lines(x=visited2[,1],y=visited2[,2],col="red")
+
+visited2<-steepest_descent_2(c(-3,-1), 0.155, function2min, grad_function_2min)$visited_points
+z<-outer(seq(-5,2),seq(-5,2),FUN = function(x,y)x^4 - 2 * x^2 + y^2)
+contour(seq(-5,2),seq(-5,2),z,xlab="x",ylab="y", main = "starting point (-3,-1)")
+lines(x=visited2[,1],y=visited2[,2],col="red")
+
+visited2<-steepest_descent_2(c(-0.5,0.5), 0.155, function2min, grad_function_2min)$visited_points
+z<-outer(seq(-5,2),seq(-5,2),FUN = function(x,y)x^4 - 2 * x^2 + y^2)
+contour(seq(-5,2),seq(-5,2),z,xlab="x",ylab="y", main = "starting point (-0.5, 0.5)")
+lines(x=visited2[,1],y=visited2[,2],col="red")
+@
+
+Note that we clearly have a problem when the starting point is not chosen close enough to the actual minima. Hence, we need to take another look at the step-size again, as we are not dealing with perfect convexity (convex on the whole domain) anymore and therefore the behavior of our algorithm changed. We tested if decreasing the step size might aid in increasing the success of our algorithm, using the starting points that had failed prior, see the test below. 
+
+\subsubsection*{Changing the $\alpha$ in non-convex functions}
+
+With the starting point $x_0 = (2.1,0)$
+\begin{itemize}
+    \item $\alpha = 0.01$
+    <<>>=
+     steepest_descent_2(c(-2.1,0), 0.01, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-2.1,0), 0.01, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.025$
+    <<>>=
+      steepest_descent_2(c(-2.1,0), 0.025, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-2.1,0), 0.025, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.05$
+    <<>>=
+     steepest_descent_2(c(-2.1,0), 0.05, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-2.1,0), 0.05, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.075$
+    <<>>=
+     steepest_descent_2(c(-2.1,0), 0.075, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-2.1,0), 0.075, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.1$
+    <<>>=
+     steepest_descent_2(c(-2.1,0), 0.1, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-2.1,0), 0.1, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.155$
+    <<>>=
+     steepest_descent_2(c(-2.1,0), 0.155, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-2.1,0), 0.155, function2min, grad_function_2min)$niter
+    @
+    \\
+\end{itemize}
+
+With the starting point $x_0 = (-3,-1)$
+
+\begin{itemize}
+    \item $\alpha = 0.01$
+    <<>>=
+     steepest_descent_2(c(-3,-1), 0.01, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-3,-1), 0.01, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.025$
+    <<>>=
+     steepest_descent_2(c(-3,-1), 0.025, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-3,-1), 0.025, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.05$
+    <<>>=
+     steepest_descent_2(c(-3,-1), 0.05, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-3,-1), 0.05, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.075$
+    <<>>=
+     steepest_descent_2(c(-3,-1), 0.075, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-3,-1), 0.075, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.1$
+    <<>>=
+     steepest_descent_2(c(-3,-1), 0.1, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-3,-1), 0.1, function2min, grad_function_2min)$niter
+    @
+    \\
+    \item $\alpha = 0.155$
+    <<>>=
+     steepest_descent_2(c(-3,-1), 0.155, function2min, grad_function_2min)$xmin
+     steepest_descent_2(c(-3,-1), 0.155, function2min, grad_function_2min)$niter
+    @
+    \\
+\end{itemize}
+
+Therefore, we may conclude that for more complex function a smaller step size has to be chosen in order for our algorithm to converge.\newline
+
+\subsubsection*{Visualizing successful convergence with new step size}
+
+We will now visualize how the smaller step-size improved our algorithm and instead of failing now converges to an appropriate approximation of the true min. 
+
+<<echo=FALSE, fig.dim = c(10,5)>>=
+par(mfcol = c(1,2))
+
+visited3<-steepest_descent_2(c(-3,-1), 0.155, function2min, grad_function_2min)$visited_points
+visited4<-steepest_descent_2(c(-2.1,0), 0.155, function2min, grad_function_2min)$visited_points
+z<-outer(seq(-5,2),seq(-5,2),FUN = function(x,y)x^4 - 2 * x^2 + y^2)
+contour(seq(-5,2),seq(-5,2),z,xlab="x",ylab="y", main = "Before using unsuitable step-sizes", sub = "start from (-2.1,0) in red and from (-3,-1) in blue 
+both using step size 0.155")
+lines(x=visited3[,1],y=visited3[,2],col="blue")
+lines(x=visited4[,1],y=visited4[,2],col="red")
+
+
+visited1<-steepest_descent_2(c(-2.1,0), 0.1, function2min, grad_function_2min)$visited_points
+visited2<-steepest_descent_2(c(-3,-1), 0.05, function2min, grad_function_2min)$visited_points
+z<-outer(seq(-2,2),seq(-2,2),FUN = function(x,y)x^4 - 2 * x^2 + y^2)
+contour(seq(-2,2),seq(-2,2),z,xlab="x",ylab="y", main = "After using smaller step-sizes", sub = "start from (-2.1,0) using step size 0.1 in red 
+and from (-3,-1) using step size 0.05 in blue")
+lines(x=visited1[,1],y=visited1[,2],col="red")
+lines(x=visited2[,1],y=visited2[,2],col="blue")
+
+@
+
+Note that we can clearly see that adjusting the step-size had a huge impact on the efficiency of our algorithm.
+
+
+
+\pagebreak
+\subsection{Multivariate function}
+
+
+Next, we just tested that our function is functional for multivariate functions as well, just do demonstrate that our algorithm is capable of such computation.\newline
+
+We chose the function, $f(x) = 2 * x^2 + 2 * y^2 + 4 * z^2 - 4 * x + 8 * y - 10 * z$, with the gradient $f'(x) = \begin{bmatrix}4 * x - 4\\ 4 * y +8 \\ 8 * z - 10\end{bmatrix}$. We know the minimum of this function to be at $(1, - 2 , \frac{10}{8})$.
+
+\subsubsection*{Testing multivariate function}
+
+Rewriting our functions in order to make them suitable for our algorithm:
+
+<<>>= 
+function3 <- function(variables) {
+  return (2* variables[1]^2 + 2 * variables[2]^2 + 4 * variables[3]^2 - 4* variables[1] +
+  8*variables[2]- 10* variables[3])
+}
+
+grad_function_3 <- function(variables){
+  return(matrix( c(4 * variables[1] - 4, 4 * variables[2] +8, 8 * variables[3] - 10)))
+}
+@
+
+And testing our algorithm.
+
+<<>>=
+steepest_descent_2(c(20, 15, 5), 0.155, function3, grad_function_3)$xmin
+steepest_descent_2(c(20, 15, 5), 0.155, function3, grad_function_3)$fmin
+@
+
+
+\subsubsection*{Repeating for a multi-variate with two or more minima}
+
+Note, keeping in mind the discoveries we made about step size in the bi-variate optimization, we need to adjust our step-size accordingly in order for our algorithm to approximate the minima points appropriately. Therefore, we chose step-size $\alpha = 0.05$ for the following function:\newline
+$f(x) = x^4 - x^2 + y^2 + z^2$ ,with two minima at $(x,y,z) = ( -\frac{1}{\sqrt{2}}, 0, 0)$ and $(x,y,z) = ( \frac{1}{\sqrt{2}}, 0, 0)$. Noting that $\pm \frac{1}{sqrt{2}} \text{ is equivalent to } \pm 7.071068e-01$.
+
+<<>>= 
+function3_alt <- function(variables) {
+  return (variables[1]^4 - 2 * variables[1]^2 + variables[2]^2 + variables[3]^2)
+}
+
+grad_function_3_alt <- function(variables){
+  return(matrix( c(4 * variables[1]^3 - 2 * variables[1], 2 * variables[2], 2 * variables[3])))
+}
+
+### starting point (1, 0.5, 0.5)
+steepest_descent_2(c(1, 0.5, 0.5), 0.05, function3_alt, grad_function_3_alt)$xmin
+### starting point (-1, 0.5, 0.5)
+steepest_descent_2(c(-1, 0.5, 0.5), 0.05, function3_alt, grad_function_3_alt)$xmin
+### starting point (4, 3, 2)
+steepest_descent_2(c(4, 3, 2), 0.05, function3_alt, grad_function_3_alt)$xmin
+### changing the step size to be smaller as the starting point is 
+### further away from the actual min
+steepest_descent_2(c(4, 3, 2), 0.01, function3_alt, grad_function_3_alt)$xmin
+@
+
+
+As visualizing above $R^2$ is not possible, we can only look at the step values of x that R outputs to check if we get a Zig-Zag. However, as we already showed this to be true in the bi-variate case we will omit this here.
+
+\pagebreak
+\section{Observations}
+
+\subsubsection*{Observations made about the tolerance}
+Playing around with the tolerance will give us less accurate results, as we stop our approximation earlier, we tested this, but chose not to display this as we preferred accuracy over speed for the purpose of this project.\newline
+
+\subsubsection*{Observations made about the step-size}
+
+Our algorithm is a very simple example of machine learning. The learning rate of the algorithm is our step-size, it became very clear during testing that the learning rate of our algorithm needed to be adjusted based on the complexity of our objective function.\newline
+
+Decreasing step-size too much had the trad-off of increasing iterations. In some cases we ran into danger, that in case our step size was too small our algorithm reached the maximum iteration before it reached convergence to the actual minimum. Of course this problem may be solved by increasing the amount of iterations we allow our algorithm to make.\newline
+
+It is also noteworthy that step-sizes too large might overshoot and ruin our approximation
+
+So in order to have less iterations we play around with the step size, i.e. smaller step sizes will give us more iterations on average, while larger step sizes will return less iteration on average, however using a step size too big will overshoot and ruin our algorithm. 
+
+Our convergence starts off fast, but due to our low tolerance we need a lot more iterations to reach our approximation, which we tolerate as we therefore get more accurate approximation. \newline
+
+
+\subsubsection*{General comments on the steepest descent method}
+However,the steepest descent method will have a hard time finding an (local) optimal value when the functions illustrates asymptotic behaviour towards $-\infty$, or when our function is not convex on the entire domain. In these cases, one has to adjust the starting values and the step sises accordingly. This is one of the drawbacks of the steepest descent method, especially using constant step sizes. Therefore to decrease the amount of iteration necessary, it is smarter to use for example the minimization rule or the limited minimization rule instead of the constant step size.
+
+\end{document}

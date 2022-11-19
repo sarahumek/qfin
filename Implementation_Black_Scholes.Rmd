@@ -1,0 +1,45 @@
+---
+title: "Implementation_Black_Scholes"
+author: "Sarah-Katharina Umek"
+date: "2022-04-19"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Code to calculate the price of European options, according to Black Scholes.
+
+```{r Put}
+# S = price, K = Strike, sigma = volatility, interest rate = r
+code_put <- function(S, K, sigma, r, theta){
+  d_1 <- (log(S / K) + (r + 0.5 * sigma^{2}) * theta) / (sigma * sqrt(theta))
+  d_2 <- d_1-sigma*sqrt(theta)
+  return(c("price (p)" = exp(-r * theta) * K * pnorm(-d_2) - S * pnorm(-d_1),
+           "payoff" = max( K - S, 0)))
+}
+
+```
+
+```{r Call}
+code_call <- function(S, K, sigma, r, theta,expo){
+ d_1 <-  (log(S / K) + (r + 0.5 * sigma^{2}) * theta) / (sigma * sqrt(theta))
+ d_2 <- d_1 - sigma * sqrt(theta)
+ call <- S * pnorm(d_1) - K * exp(-r * theta) * pnorm(d_2)
+ delta <- pnorm(d_1) * expo * S
+ bankaccount <- -K * pnorm(d_2) * exp(-r * theta) * expo
+ hedging_portfolio <- delta + bankaccount
+ #value of call position and hedging portfolio is calculated for the sale of 100 calls 
+ return(c(call * expo, hedging_portfolio))
+}
+```
+
+```{r plot}
+
+p <- sapply(seq(1 , 150), function(x){code_put(x, 100, 0.2, 0.01, 1)})
+plot(p[1,], col = 'blue', type = 'l', ylab = "price/payoff", xlab = "stock price")
+legend(20, 95, legend = c("price", "payoff"),
+       col = c("blue", "black"), lty = (1:2), cex = 0.8)
+lines(p[2,] ,col='black')
+```
